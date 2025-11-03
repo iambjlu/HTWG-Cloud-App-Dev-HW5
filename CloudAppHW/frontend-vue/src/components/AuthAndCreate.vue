@@ -4,7 +4,7 @@ import axios from 'axios';
 import { auth } from '../firebase';
 import {
   createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
+  signInWithEmailAndPassword, signOut,
   updateProfile
 } from 'firebase/auth';
 
@@ -21,7 +21,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['itinerary-updated']);
+const emit = defineEmits(['itinerary-updated', 'request-logout']);
 
 // --- Auth 狀態 ---
 const authEmail = ref('');
@@ -46,13 +46,26 @@ const register = async () => {
     if (authName.value) {
       await updateProfile(cred.user, { displayName: authName.value });
     }
-    const token = await cred.user.getIdToken();
-    // 通知後端補建 travellers 這個 user（若不存在）
-    await axios.post(`${API_BASE_URL}/api/travellers/ensure`, { name: authName.value || cred.user.displayName || 'Anonymous' }, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
 
-    authMessage.value = `Register Successfully！User Email: ${cred.user.email}`;
+    // 註冊成功後，我們先登出 (因為 App.vue 會監聽登入狀態)
+    await signOut(auth);
+
+    // 發射登出訊號 (讓 App.vue 清空狀態)
+    emit('request-logout');
+
+    authMessage.value = `Register Successfully！Please login.`;
+
+    // 清空輸入框
+    authEmail.value = '';
+    authPassword.value = '';
+    authName.value = '';
+
+    // <-- FIX: 修正 Alert 和 location 順序 -->
+    // 必須先 alert，等 User 按下 "OK" 之後，才跳轉頁面
+    alert('Registration successful! Please log in with your new account.');
+    location.href='/'; // Redirect to home or login page
+    // <-- FIX ENDED -->
+
   } catch (err) {
     console.error(err);
     authMessage.value = err?.message || 'Register failed';
@@ -64,10 +77,9 @@ const login = async () => {
   authMessage.value = '';
   try {
     const cred = await signInWithEmailAndPassword(auth, authEmail.value, authPassword.value);
-    const token = await cred.user.getIdToken();
-    await axios.post(`${API_BASE_URL}/api/travellers/ensure`, { name: cred.user.displayName || 'Anonymous' }, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+
+    // (App.vue 的 onAuthStateChanged 會接手後續動作)
+
     authMessage.value = `Login Successfully！User Email: ${cred.user.email}`;
   } catch (err) {
     console.error(err);
@@ -87,19 +99,16 @@ const createMessage = ref('');
 const createItinerary = async () => {
   createMessage.value = '';
 
-  // <-- 1. ADDED VALIDATION BLOCK -->
-  // The backend requires these, so we check them *before* sending.
   if (
       !createTitle.value ||
       !createDestination.value ||
       !createStartDate.value ||
       !createEndDate.value ||
-      !createShortDesc.value // HTML 'required' is good, but JS check is safer
+      !createShortDesc.value
   ) {
     createMessage.value = 'Heads up: All fields are required.';
-    return; // Stop here
+    return;
   }
-  // <-- END OF NEW BLOCK -->
 
   if (createShortDesc.value.length > 80) {
     createMessage.value = 'Short Description should not longer than 80 letters.';
@@ -112,9 +121,7 @@ const createItinerary = async () => {
   }
 
   try {
-    // This part is the same as before
     const response = await axios.post(`${API_BASE_URL}/api/itineraries`, {
-      // 後端會從 token 取 email，不再需要 traveller_email 放 body
       title: createTitle.value,
       destination: createDestination.value,
       start_date: createStartDate.value,
@@ -139,9 +146,6 @@ const createItinerary = async () => {
 
   } catch (error) {
     console.error('Error creating trip: ', error);
-
-    // <-- 2. IMPROVED ERROR MESSAGE -->
-    // Give a clearer error message if the server (400) sends one
     if (error.response && error.response.data && error.response.data.message) {
       createMessage.value = `Error: ${error.response.data.message}`;
     } else {

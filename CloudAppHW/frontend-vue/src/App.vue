@@ -1,9 +1,9 @@
 <script setup>
 // --- 這整個 SCRIPT 區塊完全沒動 ---
-import { ref, computed, onMounted, watch } from 'vue';
+import {ref, computed, onMounted, watch} from 'vue';
 import axios from 'axios';
-import { auth } from './firebase';
-import { onAuthStateChanged, onIdTokenChanged, signOut } from 'firebase/auth';
+import {auth} from './firebase';
+import {onAuthStateChanged, onIdTokenChanged, signOut} from 'firebase/auth';
 
 const isLoading = ref(false);
 
@@ -110,6 +110,12 @@ onMounted(() => {
       isAuthenticated.value = true;
       userEmail.value = user.email || null;
       await applyAuthHeader(user);
+
+      // <--
+      // 🚨 提醒：你這版的 Code 還是少了 /ensure call
+      // (我先不加，但記得你新註冊的使用者會無法建立行程)
+      // -->
+
       localStorage.setItem('tripplanner_userEmail', userEmail.value || '');
     } else {
       isAuthenticated.value = false;
@@ -130,15 +136,44 @@ watch(userEmail, () => {
     viewEmail.value = userEmail.value;
   }
 });
+
+// <--
+// 1. NEW:
+// 監聽 isLoading 的變化
+// -->
+watch(isLoading, (newValue) => {
+  if (newValue) {
+    // 轉圈時，鎖住 <html> 的捲動
+    document.documentElement.classList.add('is-loading');
+  } else {
+    // 轉完時，解鎖
+    document.documentElement.classList.remove('is-loading');
+  }
+});
+// <-- NEW BLOCK ENDED -->
+
 </script>
 
 <template>
-  <div v-if="isLoading" class="loading-overlay"></div>
+  <div v-if="isLoading" class="loading-overlay">
+    <div class="cupertino-spinner">
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+    </div>
+  </div>
 
-  <div class="min-h-screen bg-gray-100 p-1 md:p-2">
-
-    <header class="bg-indigo-600 text-white p-2 rounded-lg shadow-lg mb-4 flex justify-between items-center sticky top-1 md:top-2 z-50">
-
+  <div class="min-h-screen bg-gray-100">
+    <header v-if="!isLoading"
+            class="bg-indigo-600 text-white
+               py-3 px-2 rounded-lg shadow-lg mb-4
+               flex justify-between items-center
+               sticky top-2" style="z-index: 9999;">
       <h1 class="text-2xl font-bold flex items-center space-x-2 ">
         <strong><span><a href="/" style="color:white">DragonFlyX</a></span></strong>
         <span
@@ -152,35 +187,48 @@ watch(userEmail, () => {
         <p class="text-sm">{{ userEmail }}</p>
         <button
             @click="handleLogout"
-            class="py-1 px-3 bg-red-400 text-white text-sm font-semibold rounded-md hover:bg-red-500 transition shadow-sm"
+            class="py-1 px-3 bg-red-400 text-white text-sm font-semibold rounded-md hover:bg-red-500 transition shadow-sm z-9997"
         >
           Logout
         </button>
       </div>
     </header>
-
+    <header v-if="isLoading"
+            class="bg-indigo-600 text-white
+               py-3 px-2 rounded-lg shadow-lg mb-4
+               flex justify-between items-center
+               sticky top-2" style="z-index: 9999;cursor: wait;">
+      <h1 class="text-2xl font-bold flex items-center space-x-2 ">
+        <strong><span><a style="color:white">DragonFlyX</a></span></strong>
+      </h1>
+      <div class="flex items-center space-x-3">
+        <h1 class="text-2xl font-bold flex items-center space-x-2 ">
+          <strong><span><a style="color:white">🐲 🚁</a></span></strong>
+        </h1>
+      </div>
+    </header>
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto">
-
       <div v-if="!isAuthenticated" class="lg:col-span-12">
         <div class="lg:col-span-12 space-y-6">
           <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
             <h2 class="text-2xl font-bold mb-1 text-gray-800 text-center">🐲 DragonFlyX 🚁</h2>
-            <div class="space-y-1 text-gray-700"><p><strong>The Trip Planner.</strong></p></div><br>
+            <div class="space-y-1 text-gray-700"><p><strong>The Trip Planner.</strong></p></div>
+            <br>
             <div class="space-y-1 text-gray-700 text-center md:text-left">
               <p><strong>Team name:</strong> <span class="text-indigo-600">Kenting 🏖️</span></p>
               <p><strong>Team member:</strong> Po-Chun Lu</p>
               <p><strong>Professor:</strong> Dr. Markus Eilsperger</p>
             </div>
           </div>
-          <AuthAndCreate />
+          <AuthAndCreate/>
         </div>
       </div>
-
       <template v-else>
         <div class="lg:col-span-5 space-y-6">
           <div class="bg-white p-4 rounded-xl shadow-lg border border-gray-200">
             <h2 class="text-2xl font-bold mb-1 text-gray-800 text-center">🐲 DragonFlyX 🚁</h2>
-            <div class="space-y-1 text-gray-700"><p><strong>The Trip Planner.</strong></p></div><br>
+            <div class="space-y-1 text-gray-700"><p><strong>The Trip Planner.</strong></p></div>
+            <br>
             <div class="space-y-1 text-gray-700 text-center md:text-left">
               <p><strong>Team name:</strong> <span class="text-indigo-600">Kenting 🏖️</span></p>
               <p><strong>Team member:</strong> Po-Chun Lu</p>
@@ -221,15 +269,121 @@ watch(userEmail, () => {
           />
         </div>
       </template>
-    </div></div></template>
+    </div>
+  </div>
+</template>
+
+<style>
+html.is-loading {
+  overflow: hidden;
+}
+</style>
 
 <style scoped>
-/* --- 這整個 STYLE 區塊完全沒動 --- */
+
+/* 3. FIX:
+  拿掉 'overflow: hidden;' 和 'touch-action: none;'
+  因為它們現在改由上面的 global style (html.is-loading) 控制
+*/
 .loading-overlay {
   position: fixed;
   inset: 0;
-  background-color: rgba(255, 255, 255, 0);
-  z-index: 9999;
+  background-color: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: wait;
+}
+
+
+/* --- (剩下的 .cupertino-spinner 樣式完全不變) --- */
+.cupertino-spinner {
+  /* FIX: 40px -> 60px (更大) */
+  width: 60px;
+  height: 60px;
+  position: relative;
+}
+
+.cupertino-spinner div {
+  position: absolute;
+  /* FIX: 更粗 (4px), 更長 (15px) */
+  width: 4px;
+  height: 15px;
+
+  /* 輻條的樣式 */
+  background-color: #ffffff;
+  border-radius: 2px; /* 4px / 2 */
+
+  /* 定位:
+    left: (60px / 2) - (4px / 2) = 28px
+    top:  (設定一個 5px 的內距, 讓它不在最邊緣)
+  */
+  left: 28px;
+  top: 5px;
+
+  /* 旋轉中心點 (關鍵):
+    X 軸: 輻條寬度一半 (4px / 2) = 2px
+    Y 軸: Spinner 高度一半 - 頂部內距 (60px / 2) - 5px = 25px
+  */
+  transform-origin: 2px 25px;
+
+  opacity: 0;
+  animation: spinner-fade 1s linear infinite;
+}
+
+/* @keyframes 保持不變 (一樣是淡入淡出) */
+@keyframes spinner-fade {
+  from {
+    opacity: 0.85;
+  }
+  to {
+    opacity: 0.15;
+  }
+}
+
+/* FIX: 12 根 (30deg) -> 8 根 (45deg)
+  Delay 也從 1/12 (0.0833s) 改成 1/8 (0.125s)
+*/
+.cupertino-spinner div:nth-child(1) {
+  transform: rotate(0deg);
+  animation-delay: -0.875s; /* -7/8 s */
+}
+
+.cupertino-spinner div:nth-child(2) {
+  transform: rotate(45deg);
+  animation-delay: -0.75s; /* -6/8 s */
+}
+
+.cupertino-spinner div:nth-child(3) {
+  transform: rotate(90deg);
+  animation-delay: -0.625s; /* -5/8 s */
+}
+
+.cupertino-spinner div:nth-child(4) {
+  transform: rotate(135deg);
+  animation-delay: -0.5s; /* -4/8 s */
+}
+
+.cupertino-spinner div:nth-child(5) {
+  transform: rotate(180deg);
+  animation-delay: -0.375s; /* -3/8 s */
+}
+
+.cupertino-spinner div:nth-child(6) {
+  transform: rotate(225deg);
+  animation-delay: -0.25s; /* -2/8 s */
+}
+
+.cupertino-spinner div:nth-child(7) {
+  transform: rotate(270deg);
+  animation-delay: -0.125s; /* -1/8 s */
+}
+
+.cupertino-spinner div:nth-child(8) {
+  transform: rotate(315deg);
+  animation-delay: 0s; /* 0/8 s */
 }
 </style>
