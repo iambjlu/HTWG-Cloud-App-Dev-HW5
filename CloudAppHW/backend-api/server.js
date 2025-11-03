@@ -6,7 +6,7 @@ const { Storage } = require('@google-cloud/storage');
 const express = require('express');
 const mysql = require('mysql2/promise');
 const cors = require('cors');
-const admin = require('firebase-admin'); // <- NEW
+const admin = require('firebase-admin');
 
 // <-- 1. NEW IMPORT (AI Studio SDK) -->
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -60,9 +60,9 @@ if (process.env.GEMINI_API_KEY) {
     try {
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         generativeModel = genAI.getGenerativeModel({
-            model: 'gemini-2.5-flash', // Use AI Studio model name
+            model: 'gemini-2.5-flash', // <-- 使用你測試成功的 Model
         });
-        console.log('Gemini (AI Studio) initialized successfully.');
+        console.log('Gemini (AI Studio) initialized successfully with gemini-2.5-flash.');
     } catch (e) {
         console.error('Failed to initialize AI Studio Gemini API', e);
     }
@@ -80,7 +80,6 @@ const upload = multer({ storage: multer.memoryStorage() });
    Auth Middleware（一定要在用到之前宣告）
 ======================== */
 async function verifyFirebaseToken(req, res, next) {
-    // ... (no change) ...
     try {
         const hdr = req.headers.authorization || '';
         const token = hdr.startsWith('Bearer ') ? hdr.slice(7) : null;
@@ -99,7 +98,7 @@ async function verifyFirebaseToken(req, res, next) {
 /* ========================
    MySQL helpers
 ======================== */
-// ... (formatDate function, no change) ...
+
 function formatDate(date) {
     if (!date) return null;
 
@@ -113,7 +112,6 @@ function formatDate(date) {
     return `${year}/${month}/${day}`;
 }
 
-// ... (pool create, no change) ...
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -125,7 +123,8 @@ const pool = mysql.createPool({
 });
 
 
-// <-- 2. NEW HELPER FUNCTION (Gemini) -->
+// <-- 2. HELPER FUNCTIONS (Gemini + Firestore Cleanup) -->
+
 /**
  * Gets a travel suggestion from the Gemini API (AI Studio).
  * Returns null if the AI is not configured or fails.
@@ -178,6 +177,40 @@ Avoid emojis, no marketing fluff, no links, no duplication.`;
         return null; // Fail gracefully
     }
 }
+
+/**
+ * [NEW] 刪除 Firestore 中所有相關的 讚 (likes) 和 留言 (comments)
+ * 這會刪除 /likes/{id} 和 /comments/{id} 兩個文件 *及其所有子集合*
+ * @param {string} itineraryId - The ID from MySQL
+ */
+async function deleteFirestoreData(itineraryId) {
+    if (!itineraryId) return;
+
+    console.log(`[Firestore Cleanup] Starting for itinerary ID: ${itineraryId}`);
+
+    // 1. 準備好要刪除的 "根" 文件
+    // (刪除 /likes/{itineraryId} 會一併刪除 /likes/{itineraryId}/userLikes/*)
+    const likeParentDocRef = db.collection('likes').doc(itineraryId);
+
+    // (刪除 /comments/{itineraryId} 會一併刪除 /comments/{itineraryId}/items/*)
+    const commentParentDocRef = db.collection('comments').doc(itineraryId);
+
+    // 2. 建立兩個刪除 Promise
+    // db.recursiveDelete() 會刪除文件及其所有子集合，這正是我們要的
+    const deleteLikesPromise = db.recursiveDelete(likeParentDocRef);
+    const deleteCommentsPromise = db.recursiveDelete(commentParentDocRef);
+
+    try {
+        // 3. 平行執行這兩個刪除
+        await Promise.all([deleteLikesPromise, deleteCommentsPromise]);
+
+        console.log(`[Firestore Cleanup] Successfully deleted likes and comments for ID: ${itineraryId}`);
+    } catch (err) {
+        console.error(`[Firestore Cleanup] Error deleting data for ID: ${itineraryId}`, err);
+        // 就算失敗了，也不用 throw
+        // 因為這是背景清理，主要行程 (MySQL) 已經刪掉了
+    }
+}
 // <-- END NEW 2 -->
 
 
@@ -185,7 +218,7 @@ Avoid emojis, no marketing fluff, no links, no duplication.`;
    Core APIs (register, trips, etc)
 ======================== */
 
-// 1. 註冊 / 登入 ... (no change) ...
+// 1. 註冊 / 登入（保留：給非 Firebase 流程；目前前端不再使用）
 app.post('/api/register', async (req, res) => {
     const { email, name } = req.body;
     if (!email || !name) {
@@ -229,9 +262,7 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
-
 // 2. 建立行程（改為需登入，email 從 token 取，不再接受 traveller_email）
-// <-- 3. MODIFIED ROUTE -->
 app.post('/api/itineraries', verifyFirebaseToken, async (req, res) => {
     const {
         title,
@@ -297,7 +328,7 @@ app.post('/api/itineraries', verifyFirebaseToken, async (req, res) => {
             .send({
                 id: result.insertId,
                 message: 'Itinerary created successfully.',
-                suggestion: suggestion, // <-- 3. NEW: 把建議加到 response
+                suggestion: suggestion, // <-- 把建議加到 response
             });
 
     } catch (error) {
@@ -307,10 +338,9 @@ app.post('/api/itineraries', verifyFirebaseToken, async (req, res) => {
             .send({ message: 'Server error during itinerary creation.' });
     }
 });
-// <-- END NEW 3 -->
 
 
-// 3b. 取得行程列表 ... (no change) ...
+// 3b. 取得行程列表（公開：維持原本回全部、前端自行過濾）
 app.get('/api/itineraries/by-email/:email', async (req, res) => {
     const { email } = req.params; // 目前未在 SQL 用到，保留你的行為
     try {
@@ -339,7 +369,7 @@ app.get('/api/itineraries/by-email/:email', async (req, res) => {
     }
 });
 
-// 4. 行程詳細 ... (no change) ...
+// 4. 行程詳細（公開）
 app.get('/api/itineraries/detail/:id', async (req, res) => {
     const { id } = req.params;
     try {
@@ -370,7 +400,7 @@ app.get('/api/itineraries/detail/:id', async (req, res) => {
     }
 });
 
-// 5. 編輯 ... (no change) ...
+// 5. 編輯（需登入 + 擁有者；不再從 body 收 traveller_email）
 app.put('/api/itineraries/:id', verifyFirebaseToken, async (req, res) => {
     const { id } = req.params;
     const {
@@ -451,14 +481,14 @@ app.put('/api/itineraries/:id', verifyFirebaseToken, async (req, res) => {
     }
 });
 
-// 6. 刪除 ... (no change) ...
+// 6. 刪除（需登入 + 擁有者；不再從 body 收 traveller_email）
 app.delete('/api/itineraries/:id', verifyFirebaseToken, async (req, res) => {
-    const { id } = req.params;
+    const { id } = req.params; // 這就是 itineraryId
 
     try {
         const email = req.user?.email;
 
-        // 授權檢查
+        // 1. 授權檢查 (Authorization check)
         const [rows] = await pool.execute(
             `
                 SELECT i.id
@@ -475,6 +505,7 @@ app.delete('/api/itineraries/:id', verifyFirebaseToken, async (req, res) => {
             });
         }
 
+        // 2. (原程式碼) 刪除 MySQL 中的行程
         const [result] = await pool.execute(
             'DELETE FROM itineraries WHERE id = ?',
             [id],
@@ -486,7 +517,19 @@ app.delete('/api/itineraries/:id', verifyFirebaseToken, async (req, res) => {
                 .send({ message: 'Itinerary not found.' });
         }
 
+        // 3. <-- NEW: 觸發 Firestore 清理 -->
+        // 我們在 MySQL 刪除成功後，就開始清理 Firestore
+        // 我們 "不" await 它，讓它在背景跑
+        // 這樣使用者不用等清理完才收到成功回應
+        deleteFirestoreData(id).catch(err => {
+            // 即使背景清理失敗，也不要讓 API 崩潰
+            console.error(`[BG Cleanup Error] Failed to delete Firestore data for itinerary ${id}:`, err);
+        });
+        // <-- END NEW -->
+
+        // 4. (原程式碼) 馬上回傳成功
         res.send({ message: `Itinerary ID ${id} deleted successfully.` });
+
     } catch (error) {
         console.error(error);
         res
@@ -498,7 +541,6 @@ app.delete('/api/itineraries/:id', verifyFirebaseToken, async (req, res) => {
 /* ========================
    NEW: Likes API (Firestore)
 ======================== */
-// ... (Likes API functions, no change) ...
 app.post('/api/itineraries/:id/like/toggle', verifyFirebaseToken, async (req, res) => {
     try {
         const itineraryId = req.params.id;
@@ -536,6 +578,7 @@ app.post('/api/itineraries/:id/like/toggle', verifyFirebaseToken, async (req, re
         return res.status(500).send({ message: 'Like failed' });
     }
 });
+
 app.get('/api/itineraries/:id/like/count', async (req, res) => {
     try {
         const itineraryId = req.params.id;
@@ -553,6 +596,7 @@ app.get('/api/itineraries/:id/like/count', async (req, res) => {
         return res.status(500).send({ message: 'Failed to get like count' });
     }
 });
+
 app.get('/api/itineraries/:id/like/list', async (req, res) => {
     try {
         const itineraryId = req.params.id;
@@ -575,11 +619,9 @@ app.get('/api/itineraries/:id/like/list', async (req, res) => {
     }
 });
 
-
 /* ========================
    NEW: Comments API (Firestore)
 ======================== */
-// ... (Comments API functions, no change) ...
 app.get('/api/itineraries/:id/comments', async (req, res) => {
     try {
         const itineraryId = req.params.id;
@@ -602,6 +644,7 @@ app.get('/api/itineraries/:id/comments', async (req, res) => {
         return res.status(500).send({ message: 'Failed to load comments' });
     }
 });
+
 app.post('/api/itineraries/:id/comments', verifyFirebaseToken, async (req, res) => {
     try {
         const itineraryId = req.params.id;
@@ -629,6 +672,7 @@ app.post('/api/itineraries/:id/comments', verifyFirebaseToken, async (req, res) 
         return res.status(500).send({ message: 'Failed to add comment' });
     }
 });
+
 app.delete('/api/itineraries/:id/comments/:commentId', verifyFirebaseToken, async (req, res) => {
     try {
         const itineraryId = req.params.id;
@@ -662,7 +706,6 @@ app.delete('/api/itineraries/:id/comments/:commentId', verifyFirebaseToken, asyn
 /* ========================
    Travellers Ensure（需登入；第一次登入自動建）
 ======================== */
-// ... (Travellers Ensure, no change) ...
 app.post('/api/travellers/ensure', verifyFirebaseToken, async (req, res) => {
     const email = req.user?.email;
     const name = (req.body?.name || 'Anonymous').toString().slice(0, 100);
@@ -685,7 +728,6 @@ app.post('/api/travellers/ensure', verifyFirebaseToken, async (req, res) => {
 /* ========================
    Avatar 上傳（需登入；用 token 的 email 當檔名）
 ======================== */
-// ... (Avatar Upload, no change) ...
 app.post('/api/upload-avatar', verifyFirebaseToken, upload.single('avatar'), async (req, res) => {
     try {
         const email = req.user?.email; // 改用 token
