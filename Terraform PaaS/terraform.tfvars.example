@@ -1,0 +1,45 @@
+# terraform.tfvars
+# 這是你唯一需要修改的檔案
+# 1. 先填寫你的專案 ID (如果不是 htwg-cloudapp-hw)
+# 2. 填寫你的資料庫名稱和 JWT 密鑰
+# 3. 執行完資料庫部署後，回來填寫 manual_db_host
+# 4. 執行完後端部署後，回來填寫 manual_backend_url
+
+# --- 手動步驟（稍後填寫） ---
+
+manual_db_host     = "xxxxx" # 步驟 1 之後填入
+VITE_API_BASE_URL = "https://xxxxxx.a.run.app" # 步驟 2 之後填入
+
+# --- 你必須填寫的 ---
+#backend
+GEMINI_API_KEY="xxxx"
+GCP_BUCKET_NAME="htwg-cloudapp-hw.firebasestorage.app"
+db_database_name = "travel_app_db" # 範例：htwg_db
+GCP_SERVICE_ACCOUNT_JSON= <<-EOT
+{  "type": "service_account",  "project_id": "htwg-cloudapp-hw",  "private_key_id": "xxxx",  "private_key": "-----BEGIN PRIVATE KEY-----\nMII.....1LII\n-----END PRIVATE KEY-----\n",  "client_email": "xxx",  "client_id": "xxx",  "auth_uri": "https://accounts.google.com/o/oauth2/auth",  "token_uri": "https://oauth2.googleapis.com/token",  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/xxxxxx",  "universe_domain": "googleapis.com"}
+EOT
+
+#frontend
+VITE_FIREBASE_API_KEY="xxxx"
+VITE_FIREBASE_AUTH_DOMAIN="htwg-cloudapp-hw.firebaseapp.com"
+VITE_FIREBASE_PROJECT_ID="htwg-cloudapp-hw"
+VITE_FIREBASE_APP_ID="xxxxxx"
+VITE_FIREBASE_STORAGE_BUCKET="your-project.appspot.com"
+VITE_MEASUREMENTID="xxxxxx"
+
+# --- 你可以覆寫的預設值 (如果需要的話) ---
+# 以下值已從 variables.tf 帶入預設值，
+# 並且符合你的 gcloud 參數，
+# 基本上 *不需要* 在這裡取消註解或修改，
+# 除非你想改 service name 或 image path。
+
+# project_id             = "htwg-cloudapp-hw"
+# region                 = "asia-east1"
+# zone                   = "asia-east1-b"
+# db_name                = "htwg-cloud-app-dev-1141104"
+# backend_service_name   = "cloud-app-hw-backend"
+# backend_image          = "asia-east1-docker.pkg.dev/htwg-cloudapp-hw/cloud-app-hw-backend/cloud-app-hw-backend:latest"
+# frontend_service_name  = "cloud-app-hw-frontend"
+# frontend_image         = "asia-east1-docker.pkg.dev/htwg-cloudapp-hw/cloud-app-hw-frontend/cloud-app-hw-frontend:latest"
+
+
