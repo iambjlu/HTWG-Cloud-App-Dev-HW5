@@ -8,6 +8,14 @@
 - 已把映像推到 **Artifact Registry**
 - 專案已綁 **Billing**
 
+## 安裝Terraform和Google Cloud SDK
+```bash
+brew tap hashicorp/tap
+brew install hashicorp/tap/terraform
+brew install --cask google-cloud-sdk
+gcloud init
+```
+
 ## 登入
 ```bash
 gcloud auth login
