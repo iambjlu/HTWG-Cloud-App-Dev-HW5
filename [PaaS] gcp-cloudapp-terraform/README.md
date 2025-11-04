@@ -10,6 +10,8 @@
 
 ## 安裝Terraform和Google Cloud SDK
 ```bash
+sudo rm -rf /Library/Developer/CommandLineTools
+sudo xcode-select --install
 brew tap hashicorp/tap
 brew install hashicorp/tap/terraform
 brew install --cask google-cloud-sdk
