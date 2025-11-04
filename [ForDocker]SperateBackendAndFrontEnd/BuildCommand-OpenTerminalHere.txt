@@ -1,0 +1,48 @@
+# 進到程式目錄
+cd CloudAppHW-backend
+
+# 設定專案變數
+PROJECT_ID=$(gcloud config get-value project)
+REGION=asia-east1
+REPO=cloud-app-hw-backend
+
+# 建立 Artifact Registry 儲存庫（如果尚未建立）
+gcloud artifacts repositories create $REPO \
+   --repository-format=docker \
+   --location=$REGION \
+   --description="container repo"
+
+# 設定 Docker 認證
+gcloud auth configure-docker $REGION-docker.pkg.dev
+
+# 打包 image
+docker build --no-cache -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/cloud-app-hw-backend:latest .
+
+# Push 到 Artifact Registry
+docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/cloud-app-hw-backend:latest
+
+cd ..
+
+# 進到程式目錄
+cd CloudAppHW-frontend
+
+
+# 設定專案變數
+PROJECT_ID=$(gcloud config get-value project)
+REGION=asia-east1
+REPO=cloud-app-hw-frontend
+
+# 建立 Artifact Registry 儲存庫（如果尚未建立）
+gcloud artifacts repositories create $REPO \
+   --repository-format=docker \
+   --location=$REGION \
+   --description="container repo"
+
+# 設定 Docker 認證
+gcloud auth configure-docker $REGION-docker.pkg.dev
+
+# 打包 image
+docker build --no-cache -t $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/cloud-app-hw-frontend:latest .
+
+# Push 到 Artifact Registry
+docker push $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/cloud-app-hw-frontend:latest
